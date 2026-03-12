@@ -2,9 +2,9 @@
 
 > **A hands-on look at the pretrained models from [Gated Attention for Large Language Models](https://arxiv.org/abs/2505.06708) (NeurIPS 2025 Oral, Best Paper)**
 >
-> We poke around inside the 1B-parameter gated attention models released by the [Qwen team](https://github.com/qiuzh20/gated_attention), pull out the learned gate values, plot what they look like, and see what breaks when we override them.
+> This notebook pokes around inside the 1B-parameter gated attention models released by the [Qwen team](https://github.com/qiuzh20/gated_attention), pulls out the learned gate values, plots what they look like, and sees what breaks when they are overridden.
 
-> **What this is and isn't:** This is an exploratory weekend project, not a research paper. Everything runs on a free Colab T4 in about 35 minutes. We only evaluate on WikiText-2 (roughly 25K tokens). We don't train anything, and we don't run proper controls. Think of this as "let's see what's going on inside the model" rather than "here are rigorous scientific findings." The [Limitations](#limitations-and-open-questions) section is honest about what we can and can't conclude.
+> **What this is and isn't:** This is an exploratory weekend project, not a research paper. Everything runs on a free Colab T4 in about 35 minutes. Evaluation is on WikiText-2 only (roughly 25K tokens). No training is done, and no proper controls are run. Think of this as "let's see what's going on inside the model" rather than "here are rigorous scientific findings." The [Limitations](#limitations-and-open-questions) section is honest about what can and can't be concluded.
 
 ---
 
@@ -20,7 +20,7 @@
   - [1.5 Do Different Inputs Get Different Gating? (Very Preliminary)](#15-do-different-inputs-get-different-gating-very-preliminary)
   - [1.6 How Gate Distributions Change With Depth](#16-how-gate-distributions-change-with-depth)
   - [1.7 Headwise vs Elementwise](#17-headwise-vs-elementwise)
-- [Experiment 2: What Breaks When We Override the Gates?](#experiment-2-what-breaks-when-we-override-the-gates)
+- [Experiment 2: What Breaks When the Gates Are Overridden?](#experiment-2-what-breaks-when-the-gates-are-overridden)
   - [2.1 Force All Gates to a Single Value](#21-force-all-gates-to-a-single-value)
   - [2.2 Sweeping Across Fixed Values](#22-sweeping-across-fixed-values)
   - [2.3 Breaking One Layer at a Time](#23-breaking-one-layer-at-a-time)
@@ -37,17 +37,17 @@
 
 The original paper shows that sticking a simple gate (a sigmoid function) after the attention computation makes language models better in several ways. The gate learns to filter each attention head's output, letting useful information through and blocking noise.
 
-The paper reports some overall statistics about these gates (average values, attention sink percentages), but doesn't go into detail about what individual layers and heads are doing, or what happens if you mess with the gates after training. That's what we explore here.
+The paper reports some overall statistics about these gates (average values, attention sink percentages), but doesn't go into detail about what individual layers and heads are doing, or what happens if the gates are messed with after training. That's what this notebook explores.
 
-Our approach uses standard tools that have been around since at least 2019: we hook into the model's internals during a forward pass, grab the gate values, and look at them. For the ablation experiments, we replace the learned gate values with fixed numbers and see how much the model's quality drops (measured by perplexity, where lower means the model is better at predicting text).
+The approach uses standard tools that have been around since at least 2019: hooking into the model's internals during a forward pass, grabbing the gate values, and examining them. For the ablation experiments, the learned gate values are replaced with fixed numbers to see how much the model's quality drops (measured by perplexity, where lower means the model is better at predicting text).
 
-Nothing about the method is new. The only thing we're adding is applying these techniques to the specific case of gated attention models and writing up what we found.
+Nothing about the method is new. The only thing being added here is applying these techniques to the specific case of gated attention models and writing up what was found.
 
 ---
 
 ## Setup and Models
 
-We use three pretrained 1B-parameter models from [QwQZh/gated_attention](https://huggingface.co/QwQZh/gated_attention):
+Three pretrained 1B-parameter models from [QwQZh/gated_attention](https://huggingface.co/QwQZh/gated_attention) are used:
 
 | Model | What's Different | How It Works |
 |-------|-----------------|--------------|
@@ -57,9 +57,9 @@ We use three pretrained 1B-parameter models from [QwQZh/gated_attention](https:/
 
 All three have 28 layers, 16 attention heads, and were trained on 3.5 trillion tokens.
 
-**How we grab the gate values:** The model packs the gate scores into the same output as the query vectors (inside `q_proj`). We attach a hook to that layer, intercept the output, and split off the gate portion using the exact same logic as the [model's source code](https://github.com/qiuzh20/gated_attention/blob/main/modeling_qwen3.py). For ablation experiments, the hook replaces the gate values with whatever fixed number we want before the rest of the model sees them.
+**How the gate values are grabbed:** The model packs the gate scores into the same output as the query vectors (inside `q_proj`). A hook is attached to that layer, the output is intercepted, and the gate portion is split off using the exact same logic as the [model's source code](https://github.com/qiuzh20/gated_attention/blob/main/modeling_qwen3.py). For ablation experiments, the hook replaces the gate values with whatever fixed number is needed before the rest of the model sees them.
 
-**How we measure quality:** Perplexity on WikiText-2 (a standard text dataset). We use 50 chunks of 512 tokens each, so about 25K tokens total. That's a pretty small evaluation surface, which we discuss in [Limitations](#limitations-and-open-questions).
+**How quality is measured:** Perplexity on WikiText-2 (a standard text dataset), using 50 chunks of 512 tokens each, so about 25K tokens total. That's a pretty small evaluation surface, which is discussed in [Limitations](#limitations-and-open-questions).
 
 ---
 
@@ -73,7 +73,7 @@ All three have 28 layers, 16 attention heads, and were trained on 3.5 trillion t
 
 **Headwise model numbers:**
 
-| What We Measured | Value |
+| What Was Measured | Value |
 |-----------------|-------|
 | Average gate score | 0.1852 |
 | Median gate score | 0.1412 |
@@ -103,7 +103,7 @@ So the model seems to filter aggressively at the start, open up in the middle wh
 
 **Most open layers:** Layer 18 (0.253), Layer 11 (0.244), Layer 26 (0.279)
 
-The difference between the most closed head and the most open head is only about 1.4x, so no head is dramatically different from the others when you average across all layers. The interesting stuff shows up at specific (layer, head) combinations, which you can see in the heatmap. Some cells are very dark (nearly off) while others in the same layer are brighter.
+The difference between the most closed head and the most open head is only about 1.4x, so no head is dramatically different from the others when averaged across all layers. The interesting stuff shows up at specific (layer, head) combinations, which can be seen in the heatmap. Some cells are very dark (nearly off) while others in the same layer are brighter.
 
 ### 1.3 The First Token Gets Suppressed
 
@@ -121,7 +121,7 @@ The first token gets noticeably lower gate scores across every single layer, and
 
 This connects to something the paper discusses called the "attention sink." In regular transformers, when the model doesn't have anything useful to attend to, it tends to dump all the leftover attention weight onto the first token (because the math forces the weights to add up to 1). The gate gives the model another option: just turn down the volume on the output for that token instead. The consistently low gate scores on token 0 suggest the model has learned to do exactly that.
 
-**Caveat:** We only tested this on a handful of prompts. To be confident about this pattern, you'd want to test hundreds of diverse inputs and also check whether it's about the position (always token 0) or the specific word ("The").
+**Caveat:** This was only tested on a handful of prompts. To be confident about this pattern, hundreds of diverse inputs would be needed, along with checks on whether it's about the position (always token 0) or the specific word ("The").
 
 ### 1.4 Gate Scores Token by Token
 
@@ -131,7 +131,7 @@ This connects to something the paper discusses called the "attention sink." In r
 
 This heatmap shows gate scores for one prompt ("The transformer architecture uses multi-head attention to process sequences in parallel.") across all 28 layers.
 
-The first token is a dark column the whole way down, matching what we found above. Content words in the middle of the sentence tend to get higher scores, especially in middle layers. The period at the end also gets relatively low scores.
+The first token is a dark column the whole way down, matching what was found above. Content words in the middle of the sentence tend to get higher scores, especially in middle layers. The period at the end also gets relatively low scores.
 
 This is just one sentence though, so treat it as a picture of what's happening rather than proof of a general pattern.
 
@@ -149,7 +149,7 @@ This is just one sentence though, so treat it as a picture of what's happening r
 | Repetitive | 0.2024 | 33.8% |
 | Code-like | 0.2116 | 27.7% |
 
-> **Important: we used exactly one sentence per category.** That means these numbers could be entirely about the specific sentences we picked (how long they are, what words they use, how they tokenize) and not about the category at all. You cannot draw any real conclusions from n=1. We're including this because the per-layer profiles are interesting to look at, not because we're claiming code "opens gates more than prose" or anything like that.
+> **Important: exactly one sentence per category was used.** That means these numbers could be entirely about the specific sentences picked (how long they are, what words they use, how they tokenize) and not about the category at all. No real conclusions can be drawn from n=1. This is included because the per-layer profiles are interesting to look at, not because it proves code "opens gates more than prose" or anything like that.
 
 What is interesting is that all five inputs follow a similar shape across layers (low at the start, rising, oscillating, dropping at the end) but at different heights. Whether that reflects something real about how different content types are processed would require testing with hundreds of examples per category and proper statistics.
 
@@ -174,14 +174,14 @@ The shape of the distribution changes a lot depending on where you are in the mo
 <img src="figures/headwise_vs_elementwise_comparison.png" width="100%">
 </p>
 
-| What We Measured | Headwise | Elementwise |
+| What Was Measured | Headwise | Elementwise |
 |-----------------|----------|-------------|
 | Average gate score | 0.1852 | 0.1038 |
 | Median gate score | 0.1412 | 0.0434 |
 | Below 0.1 | 36.64% | 70.35% |
 | Above 0.9 | 0.15% | 0.32% |
 
-The elementwise model is way sparser. 70% of its gate values are below 0.1, compared to 37% for headwise. This makes sense: when you have 128 separate dials per head instead of 1, you can be much more selective about exactly which pieces of information to keep and which to throw away.
+The elementwise model is way sparser. 70% of its gate values are below 0.1, compared to 37% for headwise. This makes sense: when there are 128 separate dials per head instead of 1, the model can be much more selective about exactly which pieces of information to keep and which to throw away.
 
 **Looking inside a single head (Layer 14, elementwise):**
 
@@ -191,26 +191,26 @@ The elementwise model is way sparser. 70% of its gate values are below 0.1, comp
 | Always open (above 0.9 on average) | 0.0% of dimensions |
 | Changes depending on input (high variance) | 37.4% of dimensions |
 
-About a third of the dimensions inside each head are permanently turned off no matter what text you feed in. Another third actively changes based on the input. And none are permanently fully open. Every dimension gets at least some filtering.
+About a third of the dimensions inside each head are permanently turned off no matter what text is fed in. Another third actively changes based on the input. And none are permanently fully open. Every dimension gets at least some filtering.
 
 ---
 
-## Experiment 2: What Breaks When We Override the Gates?
+## Experiment 2: What Breaks When the Gates Are Overridden?
 
 Experiment 1 was about looking at the gates. Experiment 2 is about breaking them on purpose to see what happens.
 
-**A big caveat before we start:** This model was trained with gates. That means every other weight in the model learned to expect gated outputs. So when we force the gates to weird values, the model breaks. But that would probably happen if you messed with any other learned component too, like the normalization layers or the feed-forward weights. **We didn't test those other components**, so we can't say whether the gate is special or if this is just what happens when you tamper with any part of a trained model. The original paper establishes that gating helps through proper training experiments; our ablation experiments can't make that claim on their own.
+**A big caveat before starting:** This model was trained with gates. That means every other weight in the model learned to expect gated outputs. So when the gates are forced to weird values, the model breaks. But that would probably happen if any other learned component were tampered with too, like the normalization layers or the feed-forward weights. **Those other components were not tested**, so it's unclear whether the gate is special or if this is just what happens when any part of a trained model is interfered with. The original paper establishes that gating helps through proper training experiments; these ablation experiments can't make that claim on their own.
 
 ### 2.1 Force All Gates to a Single Value
 
-| What We Did | Perplexity | How Much Worse |
+| What Was Done | Perplexity | How Much Worse |
 |------------|-----------|----------------|
 | **Leave gates alone (baseline)** | **12.39** | **n/a** |
 | Force all gates to 0.116 (the paper's average) | 276.97 | 22x worse |
 | Force all gates to 1.0 (fully open, no filtering) | 251,076 | Broken |
 | Force all gates to 0.0 (fully closed, kill attention) | 303,654 | Broken |
 
-Forcing gates to either extreme (all open or all closed) completely destroys the model. The fixed average value (0.116) is much better than the extremes but still 22x worse than the actual learned gates. This tells us that the token-by-token pattern of the gates matters a lot to how this trained model works, not just the overall level of sparsity.
+Forcing gates to either extreme (all open or all closed) completely destroys the model. The fixed average value (0.116) is much better than the extremes but still 22x worse than the actual learned gates. This suggests that the token-by-token pattern of the gates matters a lot to how this trained model works, not just the overall level of sparsity.
 
 ### 2.2 Sweeping Across Fixed Values
 
@@ -239,7 +239,7 @@ Even the best fixed value (0.15, perplexity 112) is 9x worse than the learned ga
 <img src="figures/layer_ablation_gates_open.png" width="100%">
 </p>
 
-We forced each layer's gates fully open (to 1.0) one layer at a time and measured how much worse the model got.
+Each layer's gates were forced fully open (to 1.0) one layer at a time and the quality drop was measured.
 
 | Layer | Perplexity | How Much It Changed |
 |-------|-----------|-------------------|
@@ -258,7 +258,7 @@ Layer 0 is in a category by itself. Breaking just its gates accounts for 59% of 
 
 Layer 0 is also the most aggressively closed layer (77% of gates below 0.1). So the layer that does the most filtering is also the one where filtering matters the most. That makes intuitive sense: at this depth the model is working with raw token embeddings, and a lot of the attention head outputs are probably not very useful. The gate learned to suppress them, and undoing that suppression is catastrophic.
 
-**Important note:** Early transformer layers are generally more sensitive to interference of any kind because the representations haven't built up redundancy yet. We didn't test whether you'd see the same kind of concentration if you broke normalization layers or feed-forward weights at Layer 0, so we can't tell if this is about the gate specifically or just about early layers being fragile.
+**Important note:** Early transformer layers are generally more sensitive to interference of any kind because the representations haven't built up redundancy yet. It was not tested whether the same kind of concentration would appear if normalization layers or feed-forward weights were broken at Layer 0, so it's unclear if this is about the gate specifically or just about early layers being fragile.
 
 ### 2.4 Killing One Head at a Time
 
@@ -266,7 +266,7 @@ Layer 0 is also the most aggressively closed layer (77% of gates below 0.1). So 
 <img src="figures/head_ablation_top_layers.png" width="100%">
 </p>
 
-For the three most important layers (0, 1, 2), we killed each head one at a time by forcing its gate to zero and seeing what happened.
+For the three most important layers (0, 1, 2), each head was killed one at a time by forcing its gate to zero to see what happened.
 
 **Heads that actually improved when killed:**
 
@@ -291,21 +291,21 @@ For the three most important layers (0, 1, 2), we killed each head one at a time
 | 1 | 8 | +0.12 |
 | 1 | 15 | +0.11 |
 
-8 out of 48 heads we tested (17%) could be killed with no quality loss or even a slight improvement. On the other end, the most important individual head (Layer 0, Head 12) only caused a 0.36 increase when killed. Compare that to Layer 0 as a whole, which caused a 148,407 increase when all its gates were opened. The takeaway: Layer 0's sensitivity comes from all its heads working together, not from any single head being a bottleneck.
+8 out of 48 heads tested (17%) could be killed with no quality loss or even a slight improvement. On the other end, the most important individual head (Layer 0, Head 12) only caused a 0.36 increase when killed. Compare that to Layer 0 as a whole, which caused a 148,407 increase when all its gates were opened. The takeaway: Layer 0's sensitivity comes from all its heads working together, not from any single head being a bottleneck.
 
-**Caveat:** This is measured on one dataset only. A head that looks useless on WikiText-2 might be essential for code generation, math, or other tasks. You'd need to test across many benchmarks before actually removing any heads, and ideally retrain to confirm.
+**Caveat:** This is measured on one dataset only. A head that looks useless on WikiText-2 might be essential for code generation, math, or other tasks. Testing across many benchmarks would be needed before actually removing any heads, and ideally retraining to confirm.
 
 ---
 
 ## Summary of Observations
 
-| What We Saw | How Confident We Are | Why |
+| What Was Seen | How Confident | Why |
 |------------|---------------------|-----|
 | Gates are mostly closed, with values clustered near 0 | **High** | Large sample of values, consistent with the paper |
 | Early layers are more closed than middle layers | **High** | Clear pattern across all 28 layers |
 | First token gets lower gate scores than other tokens | **Moderate** | Consistent across layers but only tested on a few prompts |
 | Elementwise gating is sparser than headwise | **High** | Expected from the design, confirmed by the numbers |
-| Overriding gates with fixed values severely hurts quality | **Moderate** | Expected for any co-trained parameter, and we didn't test controls |
+| Overriding gates with fixed values severely hurts quality | **Moderate** | Expected for any co-trained parameter, and controls were not tested |
 | Gate sensitivity is concentrated in the first few layers | **Moderate** | Could be generic early-layer fragility rather than gate-specific |
 | Some heads can be killed without quality loss on WikiText-2 | **Low** | Single dataset, no statistics, no retraining |
 | Different input types produce different gate profiles | **Very low** | One example per category, not meaningful statistically |
@@ -314,19 +314,19 @@ For the three most important layers (0, 1, 2), we killed each head one at a time
 
 ## Limitations and Open Questions
 
-Let's be upfront about what's missing:
+To be upfront about what's missing:
 
-1. **No controls.** We broke the gates but didn't try breaking other parts of the model the same way. So when we say "Layer 0's gate is critical," it might just be that Layer 0 is critical in general, gate or no gate. We don't know.
+1. **No controls.** The gates were broken but no other parts of the model were broken in the same way. So when it's observed that "Layer 0's gate is critical," it might just be that Layer 0 is critical in general, gate or no gate. There's no way to know from this alone.
 
-2. **One dataset.** Everything is measured on WikiText-2, which is about 25K tokens of English Wikipedia text. We have no idea if these patterns hold on code, math, multilingual text, or anything else.
+2. **One dataset.** Everything is measured on WikiText-2, which is about 25K tokens of English Wikipedia text. There's no way to know if these patterns hold on code, math, multilingual text, or anything else.
 
-3. **One example per input type.** Section 1.5 uses a single sentence per category. You literally cannot conclude anything statistical from that. We included it because the plots are interesting, but the numbers are not meaningful.
+3. **One example per input type.** Section 1.5 uses a single sentence per category. Nothing statistical can be concluded from that. The plots are interesting to look at, but the numbers are not meaningful.
 
-4. **No training.** We only looked at the model after it was already trained. We can't tell you if the gate is architecturally valuable on its own; we can only tell you that this particular model has learned to depend on it. The original paper answers the architectural question through proper training experiments.
+4. **No training.** Only the already-trained model was examined. There's no way to tell from this alone if the gate is architecturally valuable on its own; only that this particular model has learned to depend on it. The original paper answers the architectural question through proper training experiments.
 
-5. **No error bars.** Every perplexity number is a single measurement. We didn't do bootstrapping or multiple splits to get confidence intervals.
+5. **No error bars.** Every perplexity number is a single measurement. No bootstrapping or multiple splits were done to get confidence intervals.
 
-6. **The co-training problem.** When you train a model with gates, everything else in the model adapts to expect gated outputs. So of course breaking the gates breaks the model. You'd probably see the same thing if you clamped the normalization layers to fixed values. This doesn't prove gating is special.
+6. **The co-training problem.** When a model is trained with gates, everything else in the model adapts to expect gated outputs. So of course breaking the gates breaks the model. The same thing would probably happen if the normalization layers were clamped to fixed values. This doesn't prove gating is special.
 
 7. **One model size.** These are all 1B parameter models. The patterns might look completely different at 7B or 70B.
 
@@ -334,9 +334,9 @@ Let's be upfront about what's missing:
 
 ## What Would Make This Proper Research
 
-If someone wanted to turn these observations into real findings:
+To turn these observations into real findings:
 
-1. **Run the same experiments on non-gate components** (normalization, feed-forward layers, etc.) to see if the patterns we found are gate-specific or generic.
+1. **Run the same experiments on non-gate components** (normalization, feed-forward layers, etc.) to see if the patterns found are gate-specific or generic.
 
 2. **Use hundreds of examples per input category** from established benchmarks, with proper statistical tests and confidence intervals.
 
