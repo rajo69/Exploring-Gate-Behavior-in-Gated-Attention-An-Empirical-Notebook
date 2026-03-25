@@ -2,7 +2,7 @@
 
 > **A hands-on look at the pretrained models from [Gated Attention for Large Language Models](https://arxiv.org/abs/2505.06708) (NeurIPS 2025 Oral, Best Paper)**
 >
-> This notebook pokes around inside the 1B-parameter gated attention models released by the [Qwen team](https://github.com/qiuzh20/gated_attention), pulls out the learned gate values, plots what they look like, and sees what breaks when they are overridden.
+> This notebook pokes around inside the 1.7B-parameter gated attention models released by the [Qwen team](https://github.com/qiuzh20/gated_attention), pulls out the learned gate values, plots what they look like, and sees what breaks when they are overridden.
 
 > **What this is and isn't:** This is an exploratory weekend project, not a research paper. Everything runs on a free Colab T4 in about 35 minutes. Evaluation is on WikiText-2 only (roughly 25K tokens). No training is done, and no proper controls are run. Think of this as "let's see what's going on inside the model" rather than "here are rigorous scientific findings." The [Limitations](#limitations-and-open-questions) section is honest about what can and can't be concluded.
 
@@ -47,13 +47,13 @@ Nothing about the method is new. The only thing being added here is applying the
 
 ## Setup and Models
 
-Three pretrained 1B-parameter models from [QwQZh/gated_attention](https://huggingface.co/QwQZh/gated_attention) are used:
+Three pretrained 1.7B-parameter models from [QwQZh/gated_attention](https://huggingface.co/QwQZh/gated_attention) are used:
 
 | Model | What's Different | How It Works |
 |-------|-----------------|--------------|
-| `1B_baseline` | No gates at all | Normal attention |
-| `1B_gate_headwise` | One gate value per head | Each of the 16 heads gets a single on/off dial |
-| `1B_gate_elementwise` | 128 gate values per head | Each dimension inside each head gets its own dial |
+| `1.7B_baseline` | No gates at all | Normal attention |
+| `1.7B_gate_headwise` | One gate value per head | Each of the 16 heads gets a single on/off dial |
+| `1.7B_gate_elementwise` | 128 gate values per head | Each dimension inside each head gets its own dial |
 
 All three have 28 layers, 16 attention heads, and were trained on 3.5 trillion tokens.
 
@@ -328,7 +328,7 @@ To be upfront about what's missing:
 
 6. **The co-training problem.** When a model is trained with gates, everything else in the model adapts to expect gated outputs. So of course breaking the gates breaks the model. The same thing would probably happen if the normalization layers were clamped to fixed values. This doesn't prove gating is special.
 
-7. **One model size.** These are all 1B parameter models. The patterns might look completely different at 7B or 70B.
+7. **One model size.** These are all 1.7B parameter models. The patterns might look completely different at 7B or 70B.
 
 ---
 
@@ -344,7 +344,7 @@ To turn these observations into real findings:
 
 4. **Train models from scratch** with the suggested modifications (only gating early layers, removing prunable heads, initializing gate biases differently) and see if they actually help.
 
-5. **Test at multiple scales** (1B, 7B, 15B+) to see what's consistent and what changes.
+5. **Test at multiple scales** (1.7B, 7B, 15B+) to see what's consistent and what changes.
 
 ---
 
